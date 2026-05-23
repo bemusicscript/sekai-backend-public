@@ -13,6 +13,10 @@ The backend server runs on docker with [givsor](https://github.com/google/gvisor
 - [t-wy](https://github.com/t-wy)
 - [Jiiku831](https://github.com/Jiiku831)
 
+## Architecture
+
+![architecture](architecture.svg)
+
 ## Notes
 
 ### `jiiku/`: Jiiku Python Bindings
