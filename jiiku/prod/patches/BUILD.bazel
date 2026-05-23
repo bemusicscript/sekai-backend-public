@@ -1,0 +1,83 @@
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+
+genrule(
+    name = "flat-db.genrule",
+    srcs = [
+        "@sekai-master-db",
+        "@sekai-master-db//:sentinel",
+        ":storage-sekai-best",
+    ],
+    outs = [
+        "flat-db",
+    ],
+    cmd = "./$(execpath //sekai/db:generate_flat_db_main) --output=$@ --db_path=$$(dirname $(rlocationpath @sekai-master-db//:sentinel))",
+    tools = ["//sekai/db:generate_flat_db_main"],
+)
+
+minimal_types = [
+    "Card",
+    "CardEpisode",
+    "Event",
+    "EventCard",
+    "EventDeckBonus",
+    "EventRarityBonusRate",
+    "GameCharacter",
+    "GameCharacterUnit",
+    "Music",
+    "MusicMeta",
+    "Skill",
+    "Version",
+    "WorldBloom",
+    "WorldBloomDifferentAttributeBonus",
+    "WorldBloomSupportDeckBonus",
+]
+
+genrule(
+    name = "flat-db-minimal.genrule",
+    srcs = [
+        "@sekai-master-db",
+        "@sekai-master-db//:sentinel",
+        ":storage-sekai-best",
+    ],
+    outs = [
+        "flat-db-minimal",
+    ],
+    cmd = "./$(execpath //sekai/db:generate_flat_db_main) --output=$@ --db_path=$$(dirname $(rlocationpath @sekai-master-db//:sentinel)) --no_thumbnails --keep=" + ",".join(minimal_types),
+    tools = ["//sekai/db:generate_flat_db_main"],
+)
+
+filegroup(
+    name = "profile",
+    srcs = [
+        ":profile/cards",
+        ":profile/constraints",
+        ":profile/profile",
+    ],
+)
+
+filegroup(
+    name = "profile/cards",
+    srcs = ["profile/cards.csv"],
+)
+
+filegroup(
+    name = "profile/cards_v2",
+    srcs = ["profile/cards_v2.csv"],
+)
+
+filegroup(
+    name = "profile/constraints",
+    srcs = ["profile/constraints.textproto"],
+)
+
+filegroup(
+    name = "profile/profile",
+    srcs = ["profile/profile.textproto"],
+)
+
+filegroup(
+    name = "storage-sekai-best",
+    srcs = [
+        "storage-sekai-best/music_metas.json",
+    ],
+)

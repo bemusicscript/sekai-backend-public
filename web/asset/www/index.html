@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ja" class="notranslate" translate="no">
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="google" content="notranslate">
+    <meta name="theme-color" content="#000000">
+    <meta name="referrer" content="no-referrer">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="shortcut icon" href="/static/icon/icon.png">
+    <link rel="apple-touch-icon-precomposed" href="/static/icon/icon.png">
+    <link rel="apple-touch-icon" href="/static/icons/icon.png">
+    <link rel="manifest" href="/app.webmanifest" crossorigin="use-credentials">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=M+PLUS+1&display=swap" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://unpkg.com/@sun-typeface/suit@2.0.5/fonts/static/woff2/SUIT.css"
+        crossorigin="anonymous">
+    <link rel="stylesheet" href="https://sekai.run/static/css/main.min.css">
+    <link rel="stylesheet" href="https://sekai.run/static/css/error.min.css">
+    <title>asset.sekai.run</title>
+</head>
+
+<body>
+    <div class="outer" id="error-critical">
+        <div class="middle">
+            <div class="d-flex justify-content-center align-items-center vh-100">
+                <div>
+                    <h3>asset.sekai.run</h3>
+
+                    Assets are sourced from Sekai Viewer and other well-known services.<br>
+                    Please use those services instead when obtaining sekai assets.<br>
+                    This domain only hosts the assets required for sekai.run to function.<br>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        const options = JSON.parse(localStorage.getItem("options")) ?? {};
+        if (options.theme) {
+            try {
+                document.documentElement.setAttribute("data-selected-theme", options.theme);
+            } catch (e) {
+            }
+        }
+    </script>
+</body>
+
+</html>

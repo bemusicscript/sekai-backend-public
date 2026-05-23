@@ -1,0 +1,2 @@
+user default on >fixme ~* +@all -@dangerous ~*
+user admin_fixme on >secure_fixme ~* &* +@all

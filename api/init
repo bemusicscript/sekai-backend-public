@@ -1,0 +1,15 @@
+#!/bin/sh
+
+set -e
+export PYTHONUNBUFFERED=1
+
+# use symlink for cron log and start on background
+# load crontab
+ln -sf /dev/stdout /var/log/cron.log
+rm -f /run/rsyslogd.pid
+rsyslogd -n &
+crontab /etc/cron.d/nobody
+/etc/init.d/cron start
+
+cd /usr/src/app
+exec gosu nobody /build/.venv/bin/python3 main.py

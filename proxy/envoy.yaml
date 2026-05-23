@@ -1,0 +1,138 @@
+static_resources:
+  listeners:
+  - name: egress_proxy
+    address:
+      socket_address: { address: 0.0.0.0, port_value: 3128 }
+    filter_chains:
+    - filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: egress_http
+          access_log:
+          - name: envoy.access_loggers.stdout
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
+              log_format:
+                text_format_source:
+                  inline_string: "[%START_TIME%] %DOWNSTREAM_REMOTE_ADDRESS% -> %REQ(:AUTHORITY)% %RESPONSE_CODE% %RESPONSE_CODE_DETAILS% %DURATION%ms %BYTES_SENT%b\n"
+          http2_protocol_options:
+            allow_connect: true
+          upgrade_configs:
+          - upgrade_type: CONNECT
+
+          route_config:
+            name: egress_route
+            virtual_hosts:
+            - name: allowlist
+              domains: ["*"]
+              routes:
+              - match: { connect_matcher: {} }
+                route:
+                  cluster: upstream_http_proxy
+                  upgrade_configs:
+                    - upgrade_type: CONNECT
+              - match: { prefix: "/" }
+                route: { cluster: upstream_http_proxy }
+
+          http_filters:
+          - name: envoy.filters.http.rbac
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.rbac.v3.RBAC
+              rules:
+                action: ALLOW
+                policies:
+                  "github":
+                    permissions:
+                      - or_rules:
+                          rules:
+                            - header: { name: ":authority", string_match: { exact: "github.com:443" } }
+                            - header: { name: ":authority", string_match: { suffix: ".github.com:443" } }
+                            - header: { name: ":authority", string_match: { suffix: ".githubusercontent.com:443" } }
+                    principals:
+                      - remote_ip: { address_prefix: 172.30.30.3, prefix_len: 32 }
+                      - remote_ip: { address_prefix: 172.30.30.6, prefix_len: 32 }
+                      - remote_ip: { address_prefix: 172.30.30.4, prefix_len: 32 }
+
+                  "discord_webhook":
+                    permissions:
+                      - header: { name: ":authority", string_match: { exact: "discord.com:443" } }
+                    principals:
+                      - remote_ip: { address_prefix: 172.30.30.3, prefix_len: 32 }
+                      - remote_ip: { address_prefix: 172.30.30.6, prefix_len: 32 }
+                      - remote_ip: { address_prefix: 172.30.30.67, prefix_len: 32 }
+
+                  "bot":
+                    permissions:
+                      - or_rules:
+                          rules:
+                            - header: { name: ":authority", string_match: { exact: "discord.com:443" } }
+                            - header: { name: ":authority", string_match: { suffix: ".discord.gg:443" } }
+                            - header: { name: ":authority", string_match: { suffix: ".discord.media:443" } }
+                    principals:
+                      - remote_ip: { address_prefix: 172.30.30.66, prefix_len: 32 }
+
+                  "jiiku":
+                    permissions:
+                      - or_rules:
+                          rules:
+                            - header: { name: ":authority", string_match: { exact: "nodejs.org:443" } }
+                            - header: { name: ":authority", string_match: { exact: "storage.googleapis.com:443" } }
+                            - header: { name: ":authority", string_match: { exact: "releases.bazel.build:443" } }
+                            - header: { name: ":authority", string_match: { exact: "bcr.bazel.build:443" } }
+                    principals:
+                      - remote_ip: { address_prefix: 172.30.30.3, prefix_len: 32 }
+                      - remote_ip: { address_prefix: 172.30.30.6, prefix_len: 32 }
+
+                  "api":
+                    permissions:
+                      - or_rules:
+                          rules:
+                            - header: { name: ":authority", string_match: { suffix: "fixme1:443" } }
+                            - header: { name: ":authority", string_match: { suffix: "fixme2:443" } }
+                            - header: { name: ":authority", string_match: { suffix: "fixme3:443" } }
+                            - header: { name: ":authority", string_match: { suffix: "fixme4:443" } }
+                            - header: { name: ":authority", string_match: { suffix: "fixme5:443" } }
+                            - header: { name: ":authority", string_match: { suffix: "fixme6:443" } }
+                            - header: { name: ":authority", string_match: { suffix: "fixme7:443" } }
+                    principals:
+                      - remote_ip: { address_prefix: 172.30.30.4, prefix_len: 32 }
+
+          - name: envoy.filters.http.dynamic_forward_proxy
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.dynamic_forward_proxy.v3.FilterConfig
+              dns_cache_config:
+                name: dynamic_dns_cache
+                dns_lookup_family: V4_ONLY
+                dns_refresh_rate: 60s
+                dns_failure_refresh_rate:
+                  base_interval: 2s
+                  max_interval: 10s
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
+  clusters:
+  - name: upstream_http_proxy
+    connect_timeout: 5s
+    type: STATIC
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+      cluster_name: upstream_http_proxy
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: 172.30.29.2
+                port_value: 1080
+    typed_extension_protocol_options:
+      envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+        "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+        explicit_http_config:
+          http_protocol_options: {}
+
+    transport_socket:
+      name: envoy.transport_sockets.raw_buffer
+      typed_config:
+        "@type": type.googleapis.com/envoy.extensions.transport_sockets.raw_buffer.v3.RawBuffer

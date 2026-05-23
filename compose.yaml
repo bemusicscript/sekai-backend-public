@@ -1,0 +1,394 @@
+x-extra_hosts: &v-extra_hosts
+  - "gateway.internal:172.30.30.1"
+  - "valkey.internal:172.30.30.2"
+  - "jiiku-prod.internal:172.30.30.3"
+  - "api.internal:172.30.30.4"
+  - "mariadb.internal:172.30.30.5"
+  - "jiiku-dev.internal:172.30.30.6"
+  - "bot.internal:172.30.30.66"
+  - "web.internal:172.30.30.67"
+  - "proxy.internal:172.30.30.68"
+  - "caddy.internal:172.30.30.69"
+  - "warp.internal:172.30.30.70"
+
+x-ulimits: &v-ulimits
+  nofile:
+    soft: 1048576
+    hard: 1048576
+  nproc:
+    soft: 8192
+    hard: 8192
+  memlock:
+    soft: -1
+    hard: -1
+
+x-logging: &v-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-env-proxy: &v-env-proxy
+  http_proxy: http://proxy.internal:3128
+  https_proxy: http://proxy.internal:3128
+  no_proxy: .internal,localhost,127.0.0.1
+  TZ: ${TZ}
+
+x-env-webhook: &v-env-webhook
+  DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL}
+
+x-env-mariadb: &v-env-mariadb
+  MARIADB_ROOT_HOST: ${MARIADB_ROOT_HOST}
+  MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+  MARIADB_DATABASE: ${MARIADB_DATABASE}
+  MARIADB_USER: ${MARIADB_USER}
+  MARIADB_PASSWORD: ${MARIADB_PASSWORD}
+  # - MARIADB_AUTO_UPGRADE=1
+  TZ: ${TZ}
+
+services:
+  caddy:
+    runtime: "runsc"
+    restart: always
+    container_name: caddy
+    hostname: caddy.internal
+    image: caddy:${CADDY_VERSION}
+    build:
+      context: ./caddy/
+      args:
+        CADDY_VERSION: ${CADDY_VERSION}
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+    user: 65534:65534
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./caddy/config:/etc/caddy:ro
+      - ./caddy/data:/data
+      - ./caddy/log:/var/log/caddy
+    networks:
+      sekai:
+        ipv4_address: 172.30.30.69
+      router:
+        ipv4_address: 172.30.31.2
+    depends_on:
+      - web
+    ulimits: *v-ulimits
+    logging: *v-logging
+    extra_hosts: *v-extra_hosts
+
+  warp:
+    restart: always
+    container_name: warp
+    hostname: warp.internal
+    image: warp:${APP_VERSION}
+    build:
+      context: ./warp/
+      args:
+        APP_VERSION: ${APP_VERSION}
+        GOST_VERSION: ${GOST_VERSION}
+        TARGETPLATFORM: ${TARGETPLATFORM}
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+    environment:
+      - WARP_SLEEP=5
+      - BETA_FIX_HOST_CONNECTIVITY=5
+    device_cgroup_rules:
+      - 'c 10:200 rwm'
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=0
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.core.somaxconn=65535
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./warp/data:/var/lib/cloudflare-warp
+    networks:
+      proxy:
+        ipv4_address: 172.30.29.2
+      sekai:
+        ipv4_address: 172.30.30.70
+      router:
+        ipv4_address: 172.30.31.3
+    ulimits: *v-ulimits
+    logging: *v-logging
+    extra_hosts: *v-extra_hosts
+
+  proxy:
+    runtime: "runsc"
+    restart: always
+    container_name: proxy
+    hostname: proxy.internal
+    image: envoyproxy/envoy:${PROXY_VERSION}
+    user: 65534:65534
+    pids_limit: 64
+    read_only: true
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./proxy/envoy.yaml:/etc/envoy/envoy.yaml:ro
+    tmpfs:
+      - /tmp:mode=1777
+      - /var/log/envoy
+    networks:
+      proxy:
+        ipv4_address: 172.30.29.3
+      sekai:
+        ipv4_address: 172.30.30.68
+    sysctls:
+      - net.core.somaxconn=65535
+    depends_on:
+      - warp
+    ulimits: *v-ulimits
+    logging: *v-logging
+    extra_hosts: *v-extra_hosts
+
+  web:
+    runtime: "runsc"
+    extra_hosts: *v-extra_hosts
+    restart: always
+    container_name: web
+    hostname: web.internal
+    build:
+      context: ./web/
+      args:
+        APP_VERSION: ${APP_VERSION}
+        PHP_VERSION: ${PHP_VERSION}
+    image: web:${APP_VERSION}
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+    volumes:
+      - ./web/asset/www/:/var/www/asset/www:ro
+      - ./api/app/api/downloads/mysekai:/var/www/asset/mysekai:ro
+      - ./api/app/api/downloads/character:/var/www/asset/character:ro
+      - ./web/config/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./web/config/fpm-pool.conf:/etc/php85/php-fpm.d/www.conf:ro
+      - ./web/config/php.ini:/etc/php85/php.ini:ro
+      - ./web/config/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./web/config/snakeoil.pem:/etc/nginx/snakeoil.pem:ro
+      - ./web/config/snakeoil.key:/etc/nginx/snakeoil.key:ro
+      - ./web/backend:/var/www/backend:ro
+      - ./web/frontend:/var/www/frontend:ro
+      - ./mawashi:/var/www/mawashi:ro
+      - /etc/localtime:/etc/localtime:ro
+      - ./web/data:/var/www/data
+      - ./web/tmp:/var/www/tmp
+    networks:
+      sekai:
+        ipv4_address: 172.30.30.67
+    depends_on:
+      - api
+      - valkey
+      - mariadb
+      - proxy
+      - warp
+    healthcheck:
+      disable: true
+    sysctls:
+      - net.core.somaxconn=65535
+    ulimits: *v-ulimits
+    logging: *v-logging
+    environment: *v-env-proxy
+
+  jiiku-prod:
+    runtime: "runsc"
+    extra_hosts: *v-extra_hosts
+    restart: unless-stopped
+    container_name: jiiku-prod
+    hostname: jiiku-prod.internal
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+    build:
+      context: ./jiiku/prod/
+      args:
+        APP_VERSION: ${APP_VERSION}
+        PYTHON_VERSION: ${PYTHON_VERSION}
+        UV_VERSION: ${UV_VERSION}
+        BAZEL_VERSION: ${BAZEL_VERSION}
+    image: jiiku-prod:${APP_VERSION}
+    volumes:
+      - ./jiiku/prod/dist:/app/sekai-public/dist
+      - ./jiiku/prod/cache:/app/bazel-cache
+      - ./jiiku/prod/server:/app/sekai-server/:ro
+      - ./jiiku/sekai-modules:/app/sekai-modules/:ro
+      - ./jiiku/prod/patches/music_metas.json:/app/sekai-public/music_metas.json:ro
+      - ./jiiku/prod/patches/build_python.sh:/app/sekai-public/build_python.sh:ro
+      - ./jiiku/prod/patches/BUILD.bazel:/tmp/BUILD.bazel.patch:ro
+      - /etc/localtime:/etc/localtime:ro
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+    networks:
+      sekai:
+        ipv4_address: 172.30.30.3
+    depends_on:
+      - api
+      - proxy
+      - warp
+    healthcheck:
+      disable: true
+    ulimits: *v-ulimits
+    logging: *v-logging
+    environment:
+      <<: [*v-env-proxy, *v-env-webhook]
+    sysctls:
+      - net.core.somaxconn=65535
+
+  api:
+    runtime: "runsc"
+    restart: always
+    container_name: api
+    hostname: api.internal
+    build:
+      context: ./api/
+      args:
+        APP_VERSION: ${APP_VERSION}
+        PYTHON_VERSION: ${PYTHON_VERSION}
+        UV_VERSION: ${UV_VERSION}
+    image: api:${APP_VERSION}
+    volumes:
+      - ./api/patches/WebFile.py:/build/.venv/lib/python3.14/site-packages/UnityPy/files/WebFile.py:ro
+      - ./api/init:/init:ro
+      - ./api/crontab:/etc/cron.d/nobody:ro
+      - ./api/app:/usr/src/app/
+      - ./api/prediction:/usr/src/prediction/
+      - ./api/runner:/usr/src/runner/
+      - ./api/ikea:/usr/src/ikea/
+      - ./api/rsyslogd.conf:/etc/rsyslogd.conf
+      - /etc/localtime:/etc/localtime:ro
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+    networks:
+      sekai:
+        ipv4_address: 172.30.30.4
+    depends_on:
+      - mariadb
+      - valkey
+      - proxy
+      - warp
+    ulimits: *v-ulimits
+    logging: *v-logging
+    extra_hosts: *v-extra_hosts
+    environment: *v-env-proxy
+    sysctls:
+      - net.core.somaxconn=65535
+
+  valkey:
+    runtime: "runsc"
+    restart: always
+    container_name: valkey
+    hostname: valkey.internal
+    image: valkey/valkey:${VALKEY_VERSION}
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    command: [ "valkey-server", "/usr/local/etc/valkey/valkey.conf" ]
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./valkey/conf/valkey.conf:/usr/local/etc/valkey/valkey.conf:ro
+      - ./valkey/conf/users.acl:/usr/local/etc/valkey/users.acl:ro
+      - ./valkey/data:/data
+    sysctls:
+      - net.core.somaxconn=65535
+    networks:
+      sekai:
+        ipv4_address: 172.30.30.2
+    ulimits: *v-ulimits
+    logging: *v-logging
+    extra_hosts: *v-extra_hosts
+
+  mariadb:
+    extra_hosts: *v-extra_hosts
+    restart: always
+    container_name: mariadb
+    image: mariadb:${MARIADB_VERSION}
+    hostname: mariadb.internal
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./mariadb/conf:/etc/mysql/mariadb.conf.d/:ro
+      - ./mariadb/data:/var/lib/mysql
+      - /dev/hugepages:/dev/hugepages
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+    networks:
+      sekai:
+        ipv4_address: 172.30.30.5
+    cap_add:
+      - IPC_LOCK
+      - SYS_NICE
+      - SYS_RESOURCE
+    security_opt:
+      - no-new-privileges=true
+    sysctls:
+      - net.core.somaxconn=65535
+    ulimits: *v-ulimits
+    logging: *v-logging
+    environment: *v-env-mariadb
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    hostname: cloudflared.internal
+    restart: unless-stopped
+    network_mode: "host"
+    command: tunnel run
+    environment:
+      - "TUNNEL_TOKEN=${CLOUDFLARED_TOKEN}"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/hosts:/etc/hosts:ro
+    healthcheck:
+      test: [ "CMD", "cloudflared", "--version" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    ulimits: *v-ulimits
+    logging: *v-logging
+
+  watchtower:
+    restart: unless-stopped
+    container_name: watchtower
+    image: containrrr/watchtower:${WATCHTOWER_VERSION}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - TZ=Asia/Seoul
+      - WATCHTOWER_POLL_INTERVAL=86400
+      - WATCHTOWER_CLEANUP=true
+      - DOCKER_API_VERSION=1.52
+
+networks:
+  proxy:
+    internal: true
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.29.0/24
+          gateway: 172.30.29.1
+  sekai:
+    internal: true
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.30.0/24
+          gateway: 172.30.30.1
+  router:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.31.0/24
+          gateway: 172.30.31.1

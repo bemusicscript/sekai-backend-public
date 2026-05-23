@@ -1,0 +1,25 @@
+MAILTO=""
+https_proxy=http://proxy.internal:3128
+http_proxy=http://proxy.internal:3128
+no_proxy=.internal,localhost,127.0.0.1
+
+# Update asset db
+1,31 * * * * nobody cd /usr/src/app && /build/.venv/bin/python3 app.py
+
+# predictions
+*/20 * * * * nobody cd /usr/src/prediction && /build/.venv/bin/python3 prediction.py
+
+# Runner
+* * * * * nobody cd /usr/src/runner && /build/.venv/bin/python3 runner_current.py
+
+# IKEA
+15 13 * * * nobody cd /usr/src/ikea && ./dump.sh
+15 01 * * * nobody cd /usr/src/ikea && ./dump.sh
+
+# Honor collections
+*/20 * * * * nobody cd /usr/src/runner && /build/.venv/bin/python3 honor.py
+
+# Jiiku Statistics
+10,30,50 * * * * nobody cd /usr/src/runner && /build/.venv/bin/python3 runner_statistics.py
+
+# Make sure that crontab has a newline!!!

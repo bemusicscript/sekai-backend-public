@@ -1,0 +1,26 @@
+[project]
+name = "app"
+version = "0.1.0"
+description = "API Internal Backend"
+requires-python = ">=3.14"
+dependencies = [
+    "aiocache[redis]==0.12.3",
+    "apscheduler==3.11.2",
+    "fastapi>=0.132.0",
+    "httpx[http2]==0.28.1",
+    "mariadb==1.1.14",
+    "msgpack==1.1.2",
+    "orjson==3.11.9",
+    "ormsgpack>=1.12.2",
+    "pycryptodome==3.23.0",
+    "pydantic-core>=2.41.5",
+    "python-dotenv>=1.2.1",
+    "redis>=7.2.0",
+    "requests==2.34.0",
+    "uvicorn[standard]>=0.41.0",
+    "httptools>=0.7.1",
+    "uvloop>=0.22.1",
+]
+
+[tool.uv]
+compile-bytecode = true

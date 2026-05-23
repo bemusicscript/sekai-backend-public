@@ -1,0 +1,62 @@
+{
+    email contact@sekai.run
+    admin off
+
+    servers {
+        trusted_proxies static 172.30.30.1/32
+		client_ip_headers Cf-Connecting-Ip
+		client_ip_headers X-Forwarded-For
+    }
+
+    #crowdsec {
+    #    api_url http://10.0.0.1:6767
+    #    api_key fixme
+    #    ticker_interval 15s
+    #    appsec_url http://10.0.0.1:7422
+    #}
+}
+
+##########################################
+
+api.sekai.run {
+    tls internal
+    import logging/scoreboard.conf
+    import config/default-headers.conf
+
+    route {
+        # crowdsec
+        encode zstd gzip
+        reverse_proxy https://web.internal:4443 {
+            header_up Host api.sekai.run
+            transport http {
+                versions 2
+                tls_insecure_skip_verify
+                tls_server_name api.sekai.run
+                dial_timeout 10s   # Give it more time to connect
+                keepalive 30s      # Keep the internal tunnel warm
+            }
+        }
+    }
+}
+
+asset.sekai.run {
+    tls internal
+    import logging/scoreboard.conf
+    import config/default-headers.conf
+
+    route {
+        # crowdsec
+        encode zstd gzip
+        reverse_proxy https://web.internal:4443 {
+            header_up Host asset.sekai.run
+            transport http {
+                versions 2
+                tls_insecure_skip_verify
+                tls_server_name asset.sekai.run
+                dial_timeout 10s   # Give it more time to connect
+                keepalive 30s      # Keep the internal tunnel warm
+            }
+        }
+    }
+}
+
